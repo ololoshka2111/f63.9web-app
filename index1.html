@@ -87,7 +87,7 @@
             });
             
             orderDetails += `\nАдрес доставки: ${deliveryAddress}\n`;
-            orderDetails += `Общая сумма: $${document.getElementById('total').textContent}`;
+            orderDetails += `Общая сумма: {document.getElementById('total').textContent}`рублей;
 
             // Отправляем уведомление
             await sendToAdmin(orderDetails);
