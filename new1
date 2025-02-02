@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>F 63.9</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        /* ... предыдущие стили ... */
+
+        .admin-controls {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+            width: 100%;
+        }
+        .edit-btn {
+            background: #ffc107 !important;
+            color: #000 !important;
+        }
+        .delete-btn {
+            background: #dc3545 !important;
+        }
+        .admin-mode-btn {
+            background: #6c757d !important;
+        }
+    </style>
+</head>
+<body>
+    <!-- Остальная разметка без изменений -->
+
+    <script>
+        const BOT_TOKEN = 'ВАШ_BOT_TOKEN';
+        const ADMIN_CHAT_ID = 'ВАШ_CHAT_ID';
+        let products = JSON.parse(localStorage.getItem('products')) || [];
+        let cart = [];
+        let lastOrderTime = 0;
+        let currentCategory = 'all';
+        let editMode = false;
+        let currentEditProductId = null;
+
+        // Инициализация
+        function init() {
+            Telegram.WebApp.ready();
+            Telegram.WebApp.expand();
+            
+            // Активация режима админа через URL параметр
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.has('admin')) {
+                toggleEditMode();
+                document.getElementById('categories').innerHTML += `
+                    <button class="category-btn admin-mode-btn" onclick="toggleEditMode()">
+                        ${editMode ? 'Закрыть редактирование' : 'Режим редактирования'}
+                    </button>`;
+            }
+            
+            renderProducts();
+        }
+
+        // Режим редактирования
+        function toggleEditMode() {
+            editMode = !editMode;
+            renderProducts();
+            document.querySelector('.add-product-btn').style.display = 
+                editMode ? 'none' : 'flex';
+        }
+
+        // Отображение товаров с кнопками управления
+        function renderProducts() {
+            const productGrid = document.getElementById('productGrid');
+            const filteredProducts = currentCategory === 'all' ? 
+                products : 
+                products.filter(p => p.category === currentCategory);
+            
+            productGrid.innerHTML = filteredProducts.map(product => `
+                <div class="product-card" id="product${product.id}">
+                    ${editMode ? `
+                    <div class="admin-controls">
+                        <button class="edit-btn" onclick="openEditForm('${product.id}')">✏️</button>
+                        <button class="delete-btn" onclick="deleteProduct('${product.id}')">🗑️</button>
+                    </div>` : ''}
+                    <img src="${product.image}" class="product-image" alt="${product.name}">
+                    <h3>${product.name}</h3>
+                    <p>${product.description}</p>
+                    <p class="price">${(product.price/100).toLocaleString('ru-RU')} ₽</p>
+                    <button onclick="addToCart('product${product.id}')">В корзину</button>
+                </div>
+            `).join('');
+        }
+
+        // Открытие формы редактирования
+        function openEditForm(productId) {
+            const product = products.find(p => p.id === productId);
+            if (!product) return;
+
+            currentEditProductId = productId;
+            const form = document.getElementById('adminPanel').querySelector('form');
+            form.elements[0].value = product.category;
+            form.elements[1].value = product.name;
+            form.elements[2].value = product.description;
+            form.elements[3].value = product.price/100;
+            
+            document.getElementById('adminPanel').querySelector('h3').textContent = 'Редактировать товар';
+            document.getElementById('adminPanel').querySelector('button[type="submit"]').textContent = 'Сохранить';
+            
+            showAdminPanel();
+        }
+
+        // Удаление товара
+        function deleteProduct(productId) {
+            if (confirm('Удалить этот товар?')) {
+                products = products.filter(p => p.id !== productId);
+                localStorage.setItem('products', JSON.stringify(products));
+                renderProducts();
+            }
+        }
+
+        // Обработка формы (добавление/редактирование)
+        function addNewProduct(event) {
+            event.preventDefault();
+            const form = event.target;
+            const [categorySelect, nameInput, descInput, priceInput, fileInput] = form.elements;
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const productData = {
+                    id: currentEditProductId || Date.now(),
+                    category: categorySelect.value,
+                    name: nameInput.value,
+                    description: descInput.value,
+                    price: parseInt(priceInput.value) * 100,
+                    image: e.target.result
+                };
+
+                if (currentEditProductId) {
+                    // Обновление существующего товара
+                    const index = products.findIndex(p => p.id === currentEditProductId);
+                    products[index] = productData;
+                } else {
+                    // Добавление нового товара
+                    products.push(productData);
+                }
+
+                localStorage.setItem('products', JSON.stringify(products));
+                renderProducts();
+                hideAdminPanel();
+                form.reset();
+                currentEditProductId = null;
+                document.getElementById('adminPanel').querySelector('h3').textContent = 'Добавить товар';
+                document.getElementById('adminPanel').querySelector('button[type="submit"]').textContent = 'Добавить';
+            };
+
+            if (fileInput.files[0]) {
+                reader.readAsDataURL(fileInput.files[0]);
+            } else if (currentEditProductId) {
+                // Сохранение старого изображения при редактировании
+                const oldProduct = products.find(p => p.id === currentEditProductId);
+                reader.onload({ target: { result: oldProduct.image } });
+            } else {
+                alert('Пожалуйста, выберите изображение для товара');
+            }
+        }
+
+        // Остальные функции остаются без изменений
+        // ... (showCategory, addToCart, updateCart, openCart, closeCart, checkout)
+
+        init();
+    </script>
+</body>
+</html>
