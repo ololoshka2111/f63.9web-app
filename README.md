@@ -66,19 +66,15 @@
         }
 
         .image-slider {
+            display: flex;
+            transition: transform 0.5s ease;
             height: 100%;
-            overflow-x: auto;
-            scroll-snap-type: x mandatory;
-            scroll-behavior: smooth;
-            -webkit-overflow-scrolling: touch;
         }
 
         .product-image {
-            flex: 0 0 100%;
-            width: 100%;
+            min-width: 100%;
             height: 100%;
             object-fit: cover;
-            scroll-snap-align: start;
         }
 
         .slider-controls {
@@ -223,6 +219,15 @@
         .edit-btn {
             background: #ffc107 !important;
         }
+
+        .admin-form input[type="number"] {
+            -moz-appearance: textfield;
+        }
+        .admin-form input[type="number"]::-webkit-outer-spin-button,
+        .admin-form input[type="number"]::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
     </style>
 </head>
 <body>
@@ -257,7 +262,7 @@
             </select>
             <input type="text" id="productName" placeholder="Название товара" required>
             <input type="text" id="productDescription" placeholder="Описание" required>
-            <input type="number" id="productPrice" placeholder="Цена в рублях" min="1" required>
+            <input type="number" id="productPrice" placeholder="Цена в рублях" min="0.01" step="0.01" required>
             <input type="file" id="productImage" accept="image/*" multiple>
             <button type="submit" style="margin-top: 10px;">Сохранить</button>
         </form>
@@ -300,26 +305,42 @@
     </div>
 
     <script>
-        let products = JSON.parse(localStorage.getItem('products')) || [];
-        let cart = JSON.parse(localStorage.getItem('cart')) || [];
+        let products = [];
+        let cart = [];
         let currentCategory = 'all';
         let isAdminMode = false;
         let editingProductId = null;
 
+        function escapeHTML(str) {
+            return str.replace(/&/g, '&amp;')
+                     .replace(/</g, '&lt;')
+                     .replace(/>/g, '&gt;')
+                     .replace(/"/g, '&quot;')
+                     .replace(/'/g, '&#039;');
+        }
+
         function init() {
-            cart = cart.map(item => ({
-                ...item,
-                id: Number(item.id),
-                price: Number(item.price),
-                quantity: Number(item.quantity) || 1
-            }));
-            
-            products = products.map(product => ({
-                ...product,
-                id: Number(product.id),
-                price: Number(product.price),
-                images: product.images || []
-            }));
+            try {
+                products = JSON.parse(localStorage.getItem('products') || '[]').map(p => ({
+                    id: Number(p.id),
+                    category: p.category || '',
+                    name: p.name || '',
+                    description: p.description || '',
+                    price: Number(p.price) || 0,
+                    images: Array.isArray(p.images) ? p.images : []
+                }));
+                
+                cart = JSON.parse(localStorage.getItem('cart') || '[]').map(item => ({
+                    id: Number(item.id),
+                    name: item.name || '',
+                    price: Number(item.price) || 0,
+                    quantity: Number(item.quantity) || 1
+                }));
+            } catch (e) {
+                console.error('Error parsing storage data:', e);
+                products = [];
+                cart = [];
+            }
 
             if (typeof Telegram !== 'undefined' && Telegram.WebApp) {
                 Telegram.WebApp.ready();
@@ -353,9 +374,9 @@
                 const itemTotal = (item.price / 100) * item.quantity;
                 total += itemTotal;
                 return `
-                    <div class="cart-item">
+                    <div class="cart-item" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
                         <div>
-                            <strong>${item.name}</strong><br>
+                            <strong>${escapeHTML(item.name)}</strong><br>
                             ${item.quantity} × ${(item.price / 100).toLocaleString('ru-RU')} ₽ = ${itemTotal.toLocaleString('ru-RU')} ₽
                         </div>
                         <button class="delete-btn" onclick="removeFromCart(${item.id})">❌</button>
@@ -363,7 +384,7 @@
                 `;
             }).join('');
 
-            totalElement.textContent = total.toLocaleString('ru-RU');
+            totalElement.textContent = total.toLocaleString('ru-RU') + ' ₽';
         }
 
         function nextStep() {
@@ -394,7 +415,7 @@
         }
 
         function validateOrder(data) {
-            const phoneRegex = /^(\+7|8)[\s\-]?\(?\d{3}\)?[\s\-]?\d{3}[\s\-]?\d{2}[\s\-]?\d{2}$/;
+            const phoneRegex = /^(\+7|8)[\d\s\-()]{9,}$/;
             if (!data.name) return alert('Введите ваше имя');
             if (!phoneRegex.test(data.phone)) return alert('Введите корректный номер телефона');
             if (!data.address) return alert('Укажите адрес доставки');
@@ -427,7 +448,7 @@
                     <div class="product-image-container">
                         <div class="image-slider" id="slider-${product.id}">
                             ${product.images.map(img => `
-                                <img src="${img}" class="product-image" alt="${product.name}">
+                                <img src="${escapeHTML(img)}" class="product-image" alt="${escapeHTML(product.name)}">
                             `).join('')}
                         </div>
                         ${product.images.length > 1 ? `
@@ -443,8 +464,8 @@
                             </div>
                         ` : ''}
                     </div>
-                    <h3>${product.name}</h3>
-                    <p>${product.description}</p>
+                    <h3>${escapeHTML(product.name)}</h3>
+                    <p>${escapeHTML(product.description)}</p>
                     <p class="price">${(product.price/100).toLocaleString('ru-RU')} ₽</p>
                     <button onclick="addToCart(${product.id})">В корзину</button>
                     ${isAdminMode ? `
@@ -458,40 +479,32 @@
 
         function slideImage(productId, direction) {
             const slider = document.getElementById(`slider-${productId}`);
-            const slides = slider.children;
-            const currentIndex = Math.floor(slider.scrollLeft / slider.offsetWidth);
-            let newIndex = currentIndex + direction;
+            const dots = document.getElementById(`dots-${productId}`);
+            const slidesCount = slider.children.length;
+            const currentSlide = Math.floor(slider.scrollLeft / slider.offsetWidth);
+            let newSlide = currentSlide + direction;
 
-            if (newIndex < 0) newIndex = slides.length - 1;
-            if (newIndex >= slides.length) newIndex = 0;
+            if (newSlide < 0) newSlide = slidesCount - 1;
+            if (newSlide >= slidesCount) newSlide = 0;
 
             slider.scrollTo({
-            left: newIndex * slider.offsetWidth,
-            behavior: 'smooth'
-    });
+                left: newSlide * slider.offsetWidth,
+                behavior: 'smooth'
+            });
 
-            updateDots(productId, newIndex);
-}
+            dots.querySelectorAll('.slider-dot').forEach((dot, index) => {
+                dot.classList.toggle('active', index === newSlide);
+            });
+        }
 
-        function updateDots(productId, activeIndex) {
-            const dotsContainer = document.getElementById(`dots-${productId}`);
-            if (!dotsContainer) return;
-    
-            dotsContainer.querySelectorAll('.slider-dot').forEach((dot, index) => {
-                dot.classList.toggle('active', index === activeIndex);
-    });
-}
-
-       function showSlide(productId, index) {
+        function showSlide(productId, index) {
             const slider = document.getElementById(`slider-${productId}`);
-            if (!slider) return;
-
+            const dots = document.getElementById(`dots-${productId}`);
+            
             slider.scrollTo({
-            left: index * slider.offsetWidth,
-            behavior: 'smooth'
-    });
-            updateDots(productId, index);
-}
+                left: index * slider.offsetWidth,
+                behavior: 'smooth
+ 	    });
 
             dots.querySelectorAll('.slider-dot').forEach((dot, i) => {
                 dot.classList.toggle('active', i === index);
