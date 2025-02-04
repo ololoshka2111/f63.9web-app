@@ -66,15 +66,19 @@
         }
 
         .image-slider {
-            display: flex;
-            transition: transform 0.5s ease;
             height: 100%;
+            overflow-x: auto;
+            scroll-snap-type: x mandatory;
+            scroll-behavior: smooth;
+            -webkit-overflow-scrolling: touch;
         }
 
         .product-image {
-            min-width: 100%;
+            flex: 0 0 100%;
+            width: 100%;
             height: 100%;
             object-fit: cover;
+            scroll-snap-align: start;
         }
 
         .slider-controls {
@@ -454,32 +458,40 @@
 
         function slideImage(productId, direction) {
             const slider = document.getElementById(`slider-${productId}`);
-            const dots = document.getElementById(`dots-${productId}`);
-            const slidesCount = slider.children.length;
-            const currentSlide = Math.round(slider.scrollLeft / slider.offsetWidth);
-            let newSlide = currentSlide + direction;
+            const slides = slider.children;
+            const currentIndex = Math.floor(slider.scrollLeft / slider.offsetWidth);
+            let newIndex = currentIndex + direction;
 
-            if (newSlide < 0) newSlide = slidesCount - 1;
-            if (newSlide >= slidesCount) newSlide = 0;
+            if (newIndex < 0) newIndex = slides.length - 1;
+            if (newIndex >= slides.length) newIndex = 0;
 
             slider.scrollTo({
-                left: newSlide * slider.offsetWidth,
-                behavior: 'smooth'
-            });
+            left: newIndex * slider.offsetWidth,
+            behavior: 'smooth'
+    });
 
-            dots.querySelectorAll('.slider-dot').forEach((dot, index) => {
-                dot.classList.toggle('active', index === newSlide);
-            });
-        }
+            updateDots(productId, newIndex);
+}
 
-        function showSlide(productId, index) {
+        function updateDots(productId, activeIndex) {
+            const dotsContainer = document.getElementById(`dots-${productId}`);
+            if (!dotsContainer) return;
+    
+            dotsContainer.querySelectorAll('.slider-dot').forEach((dot, index) => {
+                dot.classList.toggle('active', index === activeIndex);
+    });
+}
+
+       function showSlide(productId, index) {
             const slider = document.getElementById(`slider-${productId}`);
-            const dots = document.getElementById(`dots-${productId}`);
-            
+            if (!slider) return;
+
             slider.scrollTo({
-                left: index * slider.offsetWidth,
-                behavior: 'smooth'
-            });
+            left: index * slider.offsetWidth,
+            behavior: 'smooth'
+    });
+            updateDots(productId, index);
+}
 
             dots.querySelectorAll('.slider-dot').forEach((dot, i) => {
                 dot.classList.toggle('active', i === index);
