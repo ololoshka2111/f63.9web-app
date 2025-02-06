@@ -5,7 +5,7 @@
     <title>F 63.9</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        /* Все предыдущие стили остаются без изменений */
+        /* Основные стили */
         body {
             font-family: Arial, sans-serif;
             padding: 20px;
@@ -249,16 +249,16 @@
             <button onclick="hideAdminPanel()" style="background: none; border: none; color: #fff; font-size: 1.5em;">×</button>
         </div>
         <form class="admin-form" onsubmit="saveProduct(event)">
-    	    <select id="categorySelect" required>
-            <option value="">Выберите категорию</option>
-            <option value="Колье">Колье</option>
-            <option value="Чокеры">Чокеры</option>
-            <option value="Серьги">Серьги</option>
-            <option value="Кольца">Кольца</option>
-            <option value="Браслеты">Браслеты</option>
-            <option value="Сеты">Сеты</option>
-    	</select>
-             <input type="text" id="productName" placeholder="Название товара" required>
+            <select id="categorySelect" required>
+                <option value="">Выберите категорию</option>
+                <option value="Колье">Колье</option>
+                <option value="Чокеры">Чокеры</option>
+                <option value="Серьги">Серьги</option>
+                <option value="Кольца">Кольца</option>
+                <option value="Браслеты">Браслеты</option>
+                <option value="Сеты">Сеты</option>
+            </select>
+            <input type="text" id="productName" placeholder="Название товара" required>
             <input type="text" id="productDescription" placeholder="Описание" required>
             <input type="number" id="productPrice" placeholder="Цена в рублях" min="1" step="0.01" required>
             <div id="imagePreview" style="display: flex; gap: 5px; flex-wrap: wrap; margin: 10px 0;"></div>
@@ -291,6 +291,7 @@
         let isAdminMode = false;
         let editingProductId = null;
 
+        // Инициализация карусели
         function initCarousels() {
             document.querySelectorAll('.carousel').forEach(carousel => {
                 let currentIndex = 0;
@@ -360,48 +361,114 @@
 
         async function saveProduct(e) {
             e.preventDefault();
-            const formData = new FormData(e.target);
-            const productData = {
-                id: editingProductId || Date.now(),
-                category: document.getElementById('categorySelect').value,
-                name: document.getElementById('productName').value.trim(),
-                description: document.getElementById('productDescription').value.trim(),
-                price: Math.round(parseFloat(document.getElementById('productPrice').value) * 100),
-                images: []
-            };
+            
+            try {
+                // Сбор данных формы
+                const productData = {
+                    id: editingProductId || Date.now(),
+                    category: document.getElementById('categorySelect').value,
+                    name: document.getElementById('productName').value.trim(),
+                    description: document.getElementById('productDescription').value.trim(),
+                    price: Math.round(parseFloat(document.getElementById('productPrice').value) * 100),
+                    images: []
+                };
 
-            // Валидация
-            if (!productData.category) return alert('Выберите категорию!');
-            if (!productData.name) return alert('Введите название товара!');
-            if (isNaN(productData.price) || productData.price <= 0) return alert('Некорректная цена!');
+                // Валидация
+                if (!productData.category) throw new Error('Выберите категорию!');
+                if (!productData.name) throw new Error('Введите название товара!');
+                if (isNaN(productData.price) || productData.price <= 0) throw new Error('Некорректная цена!');
 
-            // Обработка изображений
-            const existingImages = Array.from(document.querySelectorAll('#imagePreview img'))
-                .map(img => img.src);
-            const newImages = await Promise.all(
-                Array.from(document.getElementById('productImages').files)
-                    .map(file => new Promise((resolve) => {
-                        const reader = new FileReader();
-                        reader.onload = () => resolve(reader.result);
-                        reader.readAsDataURL(file);
-                    }))
-            );
+                // Обработка изображений
+                const existingImages = Array.from(document.querySelectorAll('#imagePreview img'))
+                    .map(img => img.src);
+                
+                const newImages = await Promise.all(
+                    Array.from(document.getElementById('productImages').files)
+                        .map(file => new Promise((resolve, reject) => {
+                            const reader = new FileReader();
+                            reader.onload = () => resolve(reader.result);
+                            reader.onerror = reject;
+                            reader.readAsDataURL(file);
+                        }))
+                );
 
-            productData.images = [...existingImages, ...newImages];
-            if (productData.images.length === 0) return alert('Добавьте хотя бы одно изображение!');
+                productData.images = [...existingImages, ...newImages];
+                if (productData.images.length === 0) throw new Error('Добавьте хотя бы одно изображение!');
 
-            if (editingProductId) {
-                const index = products.findIndex(p => p.id === editingProductId);
-                products[index] = productData;
-            } else {
-                products.push(productData);
+                // Обновление или добавление товара
+                if (editingProductId) {
+                    const index = products.findIndex(p => p.id === editingProductId);
+                    if (index === -1) throw new Error('Товар не найден');
+                    products[index] = productData;
+                } else {
+                    products.push(productData);
+                }
+
+                // Сохранение и обновление
+                localStorage.setItem('products', JSON.stringify(products));
+                renderProducts();
+                hideAdminPanel();
+                
+            } catch (error) {
+                alert(error.message);
+                console.error('Ошибка сохранения:', error);
             }
-
-            localStorage.setItem('products', JSON.stringify(products));
-            renderProducts();
-            hideAdminPanel();
         }
 
+        function editProduct(productId) {
+            const product = products.find(p => p.id === productId);
+            if (!product) return;
+
+            editingProductId = productId;
+            
+            // Заполнение полей формы
+            document.getElementById('categorySelect').value = product.category;
+            document.getElementById('productName').value = product.name;
+            document.getElementById('productDescription').value = product.description;
+            document.getElementById('productPrice').value = (product.price/100).toFixed(2);
+            
+            // Отображение изображений
+            const preview = document.getElementById('imagePreview');
+            preview.innerHTML = product.images.map(img => `
+                <div style="position:relative; margin:5px;">
+                    <img src="${img}" 
+                         style="width:80px; height:80px; object-fit:cover; border-radius:4px;">
+                    <button onclick="this.parentElement.remove()"
+                            style="position:absolute; top:2px; right:2px; 
+                                   background:red; border:none; color:white; 
+                                   border-radius:50%; width:16px; height:16px; 
+                                   font-size:10px; line-height:16px; padding:0;">
+                        ×
+                    </button>
+                </div>
+            `).join('');
+
+            document.getElementById('adminPanelTitle').textContent = 'Редактировать товар';
+            document.getElementById('adminPanel').style.display = 'block';
+        }
+
+        function deleteProduct(productId) {
+            if (confirm('Удалить товар?')) {
+                products = products.filter(p => p.id !== productId);
+                localStorage.setItem('products', JSON.stringify(products));
+                renderProducts();
+            }
+        }
+
+        function showAdminPanel() {
+            document.getElementById('adminPanel').style.display = 'block';
+            hideAdminPanel();
+            document.getElementById('adminPanelTitle').textContent = 'Добавить товар';
+            document.querySelector('.admin-form').reset();
+            document.getElementById('imagePreview').innerHTML = '';
+            document.getElementById('productImages').value = '';
+            editingProductId = null;
+        }
+
+        function hideAdminPanel() {
+            document.getElementById('adminPanel').style.display = 'none';
+        }
+        
         function addToCart(productId) {
             const product = products.find(p => p.id === productId);
             if (!product) return;
@@ -429,87 +496,6 @@
             updateCart();
         }
 
-        function editProduct(productId) {
-            const product = products.find(p => p.id === productId);
-            if (!product) return;
-
-            editingProductId = productId;
-            document.getElementById('categorySelect').value = product.category;
-            document.getElementById('productName').value = product.name;
-            document.getElementById('productDescription').value = product.description;
-            document.getElementById('productPrice').value = (product.price/100).toFixed(2);
-            
-            const preview = document.getElementById('imagePreview');
-            preview.innerHTML = product.images.map(img => `
-                <div style="position:relative">
-                    <img src="${img}" style="width:80px;height:80px;object-fit:cover;border-radius:4px">
-                    <button onclick="this.parentElement.remove()" 
-                        style="position:absolute;top:2px;right:2px;background:red;border:none;color:white;border-radius:50%;width:16px;height:16px;font-size:10px">×</button>
-                </div>
-            `).join('');
-
-            document.getElementById('adminPanelTitle').textContent = 'Редактировать товар';
-            showAdminPanel();
-        }
-
-        // Создание объекта товара
-        const productData = {
-            id: editingProductId || Date.now(),
-            category: category,
-            name: productName,
-            description: description,
-            price: Math.round(price * 100),
-            images: [...existingImages, ...newImages]
-        };
-
-        // Обновление массива товаров
-        if (editingProductId) {
-            const index = products.findIndex(p => p.id === editingProductId);
-            if (index > -1) products[index] = productData;
-        } else {
-            products.push(productData);
-        }
-
-        // Сохранение и обновление
-        localStorage.setItem('products', JSON.stringify(products));
-        renderProducts();
-        hideAdminPanel();
-        
-    } catch (error) {
-        console.error('Ошибка сохранения:', error);
-        alert('Ошибка: ' + error.message);
-    }
-}
-
-        function hideAdminPanel() {
-            document.getElementById('adminPanel').style.display = 'none';
-            document.getElementById('productImages').value = '';
-            document.getElementById('imagePreview').innerHTML = '';
-            document.querySelector('.admin-form').reset();
-            editingProductId = null;
-        }
-
-        // Остальные функции остаются без изменений
-        function addToCart(productId) {
-            const product = products.find(p => p.id === productId);
-            if (product) {
-                cart.push(product);
-                saveCart();
-                updateCart();
-                alert('Товар добавлен в корзину!');
-            }
-        }
-
-        function updateCart() {
-            const total = cart.reduce((sum, item) => sum + item.price/100, 0);
-            document.getElementById('total').textContent = total.toLocaleString('ru-RU');
-            document.getElementById('cart-items').innerHTML = cart.map(item => `
-                <div class="cart-item">
-                    <p>${item.name} - ${(item.price/100).toLocaleString('ru-RU')} ₽</p>
-                </div>
-            `).join('');
-        }
-
         function checkout() {
             if (cart.length === 0) {
                 alert('Корзина пуста!');
@@ -517,10 +503,19 @@
             }
             
             cart = [];
-            saveCart();
+            localStorage.setItem('cart', JSON.stringify(cart));
             updateCart();
             closeCart();
             alert('Заказ оформлен!');
+        }
+
+        function openCart() {
+            document.getElementById('cartModal').style.display = 'block';
+            updateCart();
+        }
+
+        function closeCart() {
+            document.getElementById('cartModal').style.display = 'none';
         }
 
         function toggleAdminMode() {
@@ -529,152 +524,9 @@
             renderProducts();
         }
 
-        function deleteProduct(productId) {
-            if (confirm('Удалить товар?')) {
-                products = products.filter(p => p.id !== productId);
-                saveProducts();
-                renderProducts();
-            }
-        }
-
-        function editProduct(productId) {
-            const product = products.find(p => p.id === productId);
-            editingProductId = productId;
-            
-            document.getElementById('categorySelect').value = product.category;
-            document.getElementById('productName').value = product.name;
-            document.getElementById('productDescription').value = product.description;
-            document.getElementById('productPrice').value = (product.price/100).toFixed(2);
-
-            const preview = document.getElementById('imagePreview');
-            preview.innerHTML = product.images.map(img => `
-                <div style="position: relative;">
-                    <img src="${img}" style="width: 80px; height: 80px; object-fit: cover; border-radius: 4px;">
-                    <button onclick="removeImage(this, '${img}')" 
-                            style="position: absolute; top: 2px; right: 2px; background: red; border: none; color: white; border-radius: 50%; width: 16px; height: 16px; font-size: 10px; line-height: 16px; padding: 0;">×</button>
-                </div>
-            `).join('');
-            
-            document.getElementById('adminPanelTitle').textContent = 'Редактировать товар';
-            showAdminPanel();
-        }
-
-        function removeImage(button, imgToRemove) {
-            const product = products.find(p => p.id === editingProductId);
-            product.images = product.images.filter(img => img !== imgToRemove);
-            button.parentElement.remove();
-            saveProducts();
-        }
-
-        async function saveProduct(e) {
-            e.preventDefault();
-            const form = e.target;
-            const priceInput = document.getElementById('productPrice');
-            const price = parseFloat(priceInput.value);
-            const productName = document.getElementById('productName').value.trim();
-            const category = document.getElementById('categorySelect').value;
-
-            if (!category) {
-                alert('Выберите категорию');
-                document.getElementById('categorySelect').focus();
-                return;
-            }
-
-            if (isNaN(price) || price <= 0) {
-                alert('Введите корректную цену (число больше 0)');
-                priceInput.focus();
-                return;
-            }
-
-            if (!productName) {
-                alert('Введите название товара');
-                document.getElementById('productName').focus();
-                return;
-            }
-
-            const files = Array.from(document.getElementById('productImages').files);
-            const existingImages = editingProductId 
-                ? [...document.querySelectorAll('#imagePreview img')].map(img => img.src)
-                : [];
-
-            if (existingImages.length === 0 && files.length === 0) {
-                alert('Добавьте минимум одно изображение');
-                return;
-            }
-
-            try {
-                const newImages = await Promise.all(
-                    files.map(file => readFileAsDataURL(file))
-                );
-
-                const productData = {
-                    id: editingProductId || Date.now(),
-                    category: category,
-                    name: productName,
-                    description: document.getElementById('productDescription').value.trim(),
-                    price: Math.round(price * 100),
-                    images: [...existingImages, ...newImages]
-                };
-
-                if (editingProductId) {
-                    const index = products.findIndex(p => p.id === editingProductId);
-                    if (index === -1) throw new Error('Товар не найден');
-                    products[index] = productData;
-                } else {
-                    products.push(productData);
-                }
-
-                saveProducts();
-                renderProducts();
-                hideAdminPanel();
-                
-            } catch (error) {
-                console.error('Ошибка сохранения:', error);
-                alert('Произошла ошибка при сохранении: ' + error.message);
-            }
-        }
-
-        function readFileAsDataURL(file) {
-            return new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = () => resolve(reader.result);
-                reader.onerror = reject;
-                reader.readAsDataURL(file);
-            });
-        }
-
-        function saveProducts() {
-            localStorage.setItem('products', JSON.stringify(products));
-        }
-
-        function saveCart() {
-            localStorage.setItem('cart', JSON.stringify(cart));
-        }
-
-        function showAdminPanel() {
-            document.getElementById('adminPanel').style.display = 'block';
-        }
-
-        function hideAdminPanel() {
-            document.getElementById('adminPanel').style.display = 'none';
-            document.getElementById('adminPanelTitle').textContent = 'Добавить товар';
-            document.querySelector('.admin-form').reset();
-            document.getElementById('imagePreview').innerHTML = '';
-            editingProductId = null;
-        }
-
-        function openCart() {
-            document.getElementById('cartModal').style.display = 'block';
-        }
-
-        function closeCart() {
-            document.getElementById('cartModal').style.display = 'none';
-        }
-
         function init() {
             Telegram.WebApp.ready();
             Telegram.WebApp.expand();
-            showCategory('all');
             renderProducts();
             updateCart();
         }
